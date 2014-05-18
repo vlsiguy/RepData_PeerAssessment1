@@ -1,20 +1,99 @@
-# Reproducible Research: Peer Assessment 1
-
+Reproducible Research: Peer Assessment 1
+==========================================
+# Activity Log
+This report follows the activity of a indivdual subject over the course of two months, October and November 2012, using a personal monitoring device.  Each 24-hour period was split into 5 minute intervals and the device recorded the number of steps the subject took within each interval.
 
 ## Loading and preprocessing the data
-
-
+To analyze the data we read the file, *activity.csv*, into R.  This file contains the **number of steps** taken each **interval** for each **date** during recorded 2 month period.
+```{r}
+activity <- read.csv("activity.csv")
+```
 
 ## What is mean total number of steps taken per day?
-
-
+We first analyze the number of steps taken per day.  For this we can use the *tapply(summaryVariable, groupingVariable, function)* function in R to group together the number of steps for each day and apply the *sum* function to them.  From this we can graphically plot the historgram of the steps per day.
+```{r}
+steps.perday <- tapply(activity$steps, activity$date, sum)
+hist(steps.perday, breaks=50, main="Average Steps Taken Per Day (exlcuding NA values)", xlab="day", ylab="frequency")
+```
+We then calculate the mean and median steps taken per day.
+```{r}
+steps.avg.perday <- mean(steps.perday, na.rm=TRUE)
+steps.avg.perday
+median(steps.perday, na.rm=TRUE)
+```
+This individual took an average of `r steps.avg.perday` which is around the recommended number of steps someone should take per day.
 
 ## What is the average daily activity pattern?
+We are also interested in the daily activity pattern for the individual.  We again use the *tapply* function, but this time group the data by its interval number and calculate the mean across each group.  A line plot can then be produced showing the number of steps vs interval.
+```{r}
+steps.avg.perinterval <- tapply(activity$steps, activity$interval, mean, na.rm=TRUE)
+intervals <- levels(factor(activity$interval))
+plot(intervals, steps.avg.perinterval, type="l", main="Daily Activity Pattern", xlab="interval", ylab="avg steps")
+```
+The plot shows a peak of steps that are about twice that of other intervals indicating that the individual might have a set time of day that they actively walk as part of an exercise program.
 
+The maximum average number of steps that the individual took in a single 5-minute interval throughout the day can be calculated.
+```{r}
+maxsteps.perday <- max(steps.avg.perinterval)
+maxsteps.perday
+```
+To find which interval had the maximum average number of steps we use the *which* function comparing each data point to the *max* steps.
+```{r}
+idx.maxsteps <- which(steps.avg.perinterval == max(steps.avg.perinterval))
+idx.maxsteps[[1]]
+```
 
-
-## Imputing missing values
-
-
+## Inputing missing values
+The activity data was missing some step values and that could be affecting our analysis since we have ignored them up until this point.  In order to fill in the missing data without corrupting my original dataset I am going to make a copy called *activity.nona*.  Now we need to assign a reasonable value to these missing values.  A good approximation would be to take the average number of steps taken within the 5-minute interval that is associated with the missing value.  In R, I do this by finding the indexes of each NA value in the data and determine the interval number in which these occurred.
+```{r}
+activity.nona <- activity
+idx.na <- which(is.na(activity.nona))
+na.intervals <- activity$interval[idx.na]
+```
+The *steps.avg.perinterval* list has named integer fields (ie. string of the interval number), so in order to access the average steps by field name I need to create a string from the interval number (using *sprintf*).  I then apply the average steps to the NA.
+```{r}
+for(i in 1:length(idx.na))
+  {
+    # The index into the average steps per interval is (steps/5)+1
+    activity.nona$steps[idx.na[i]] <- steps.avg.perinterval[[sprintf("%d", na.intervals[i])]] 
+  }
+```
+We can compare a histogram of this processed data with that of when we ignored the NA values.
+```{r}
+steps.perday.nona <- tapply(activity.nona$steps, activity.nona$date, sum)
+```
+The plots look very similiar indicating that the missing values did not impact the data much.
+```{r}
+hist(steps.perday.nona, breaks=50, main="Average Steps Taken Per Day", xlab="day", ylab="frequency")
+```
+Calculating the mean and median for this data nad comparing to the analysis ignoring the NA values we see that the mean is the same and the median is nearly the same.
+```{r}
+mean(steps.perday.nona)
+median(steps.perday.nona)
+```
+One explanation might be that the average number of steps per interval for the missing values are insignificant when summing the total number of steps per day.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+To seperate the weekdays from the weekends we need to define a day to each date.  R can use the POSIXlt object and the wday field within it to set a day (0-6 Sunday through Saturday).  Alternatively there is a weekdays() function in R.  Note that the dates in the data are already in POSIX form which makes this easy to do.  Also we will label the day as a weekday or weekend based on its numerical id.  Dates that have a numerical day of 6 or 0 refer to Saturday and Sunday respectively and therefore can be labeled as a weekend.  Days that are not weekends are by definition weekdays.  We will append these new factors to the activity data.
+```{r}
+activity.nona$day <- as.POSIXlt(activity.nona$date)$wday
+activity.nona$daytype[activity.nona$day == 0|activity.nona$day == 6] <- "weekend"
+activity.nona$daytype[activity.nona$day != 0&activity.nona$day != 6] <- "weekday"
+```
+Next we will extract a subset of the activity data into weekday and weekend groups.
+```{r}
+activity.weekend <- subset(activity.nona, daytype == "weekend")
+activity.weekday <- subset(activity.nona, daytype == "weekday")
+```
+We can then calculate the average steps per interval within each weekday/weekend group.
+```{r}
+steps.avg.perinterval.weekend <- tapply(activity.weekend$steps, activity.weekend$interval, mean)
+steps.avg.perinterval.weekday <- tapply(activity.weekday$steps, activity.weekday$interval, mean)
+```
+Finally, we will plot the weekday and weekend activity together.
+```{r}
+par(mfrow=c(2,1))
+plot(intervals, steps.avg.perinterval.weekday, type="l", ylim=c(0, maxsteps.perday), main="Daily Activity Pattern (Weekday)", xlab="interval", ylab="avg steps")
+plot(intervals, steps.avg.perinterval.weekend, type="l", main="Daily Activity Pattern (Weekend)", xlab="interval", ylab="avg steps")
+```
+This plot shows that during the weekday there is a long period of time where the individual is not walking much and therefore likely has a job or activity that does not require much movement.  There is a spike at one particular range of intervals again indicating that the subject is actively involved in a dedicated time for walking.  On the weekend the individual has a much more uniform amount of steps indicating that they are more active throughout the day on the weekends.
